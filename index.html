@@ -1,0 +1,585 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Investments Dashboard</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="https://d3js.org/topojson.v3.min.js"></script>
+<script src="city_data.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#f1f5f9;padding:16px;color:#1e293b}
+.dash{max-width:1600px;margin:0 auto}
+h1{font-size:20px;font-weight:700;margin-bottom:16px;color:#0f172a}
+h2{font-size:14px;font-weight:600;margin-bottom:8px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px}
+.card{background:#fff;border-radius:12px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,0.1)}
+.row{display:grid;gap:12px;margin-bottom:12px}
+.r-map{grid-template-columns:2fr 1fr}
+.r-4{grid-template-columns:repeat(4,1fr)}
+.filters{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
+.fg{display:flex;flex-direction:column;gap:2px}
+.fl{font-size:10px;font-weight:600;color:#64748b;text-transform:uppercase}
+.fg select{padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:11px;background:#fff;color:#1e293b}
+.btn{padding:4px 12px;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer}
+.btn1{background:#3b82f6;color:#fff}.btn1:hover{background:#2563eb}
+.btn2{background:transparent;border:1px solid #94a3b8;color:#64748b}.btn2:hover{background:#e2e8f0}
+.badge{font-size:9px;padding:2px 6px;border-radius:4px;font-weight:600;margin-left:4px}
+.bg{background:#dcfce7;color:#166534}
+.bm{background:#dbeafe;color:#1e40af}
+.bi{background:#fef3c7;color:#92400e}
+.bz{background:#f3e8ff;color:#6b21a8}
+.ba{background:#f1f5f9;color:#334155}
+.legend-item{display:flex;align-items:center;gap:4px;font-size:10px;color:#64748b}
+.legend-dot{width:10px;height:10px;border-radius:2px}
+table.dt{width:100%;border-collapse:collapse;font-size:10px}
+table.dt th{padding:4px 6px;border-bottom:1px solid #e2e8f0;color:#64748b;font-weight:600;text-align:left;white-space:nowrap}
+table.dt td{padding:4px 6px;border-bottom:1px solid #f1f5f9;color:#334155}
+table.dt tr:hover{background:#f8fafc}
+table.dt tr.tot td{font-weight:700;border-top:2px solid #cbd5e1;background:#f8fafc}
+.bar-cell{height:14px;border-radius:2px;display:inline-block;min-width:2px;vertical-align:middle}
+.tblWrap{max-height:360px;overflow:auto}
+.no-data{text-align:center;color:#94a3b8;font-size:11px;padding:20px 0;font-style:italic}
+.ttc{font-size:10px;fill:#94a3b8}
+.ttl{font-size:11px;fill:#64748b}
+.axis text{font-size:9px;fill:#94a3b8}
+.axis line,.axis path{stroke:#e2e8f0}
+@media(max-width:1100px){.r-map{grid-template-columns:1fr}.r-4{grid-template-columns:1fr 1fr}.filters{flex-direction:column}}
+@media(max-width:700px){.r-4{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="dash">
+<h1>Investments Dashboard <span style="color:#64748b;font-size:12px;font-weight:400">B2C App | Dec 2025 - Aug 2026</span></h1>
+<div class="card" style="margin-bottom:12px;padding:10px 16px">
+<div class="filters">
+<div class="fg"><span class="fl">Channel</span><select id="cType" onchange="onCampaignChange()"><option value="all">All Channels</option><option value="google">Google</option><option value="meta">Meta</option><option value="indeed">Indeed</option><option value="zip">ZipRecruiter</option></select></div>
+<div class="fg" id="subTypeWrap"><span class="fl">Campaign Type</span><select id="subType" onchange="render()"><option value="all">All</option></select></div>
+<div class="fg"><span class="fl">Conversion Type</span><select id="convType" onchange="render()"><option value="all">All</option><option value="applications">Applications</option><option value="installs">Installs</option><option value="leads">Leads</option></select></div>
+<div class="fg"><span class="fl">Map Metric</span><select id="mapMetric" onchange="render()"><option value="all">All</option><option value="spend">Spend</option><option value="impr">Impr.</option><option value="clicks">Clicks</option><option value="conversions">Conversions</option><option value="cpa">CPA</option></select></div>
+<div style="display:flex;gap:4px;align-self:flex-end">
+<button class="btn btn1" onclick="render()">Apply</button>
+<button class="btn btn2" onclick="resetF()">Reset</button>
+</div>
+</div>
+</div>
+
+<div class="row r-map">
+<div class="card">
+<h2>US Map <span class="badge bm" id="mapBadge">Google</span><span class="badge bg" id="metricBadge">Spend</span></h2>
+<div id="mapContainer" style="position:relative;min-height:350px">
+<svg id="usMap" viewBox="0 0 960 600" style="width:100%;height:auto"></svg>
+<div id="mapTooltip" style="display:none;position:absolute;background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;font-size:11px;pointer-events:none;z-index:100;box-shadow:0 4px 12px rgba(0,0,0,0.15);color:#1e293b"></div>
+</div>
+<div style="display:flex;gap:12px;margin-top:8px;justify-content:center">
+<div class="legend-item"><div class="legend-dot" id="legL"></div> Low</div>
+<div class="legend-item"><div class="legend-dot" id="legML"></div></div>
+<div class="legend-item"><div class="legend-dot" id="legMH"></div></div>
+<div class="legend-item"><div class="legend-dot" id="legH"></div> High</div>
+</div>
+</div>
+<div class="card">
+<h2>Top States</h2>
+<div id="topStates"></div>
+</div>
+</div>
+
+<div class="card" style="margin-bottom:12px">
+<div class="filters" style="margin-bottom:10px">
+<div class="fg"><span class="fl">State</span><select id="stateSel" onchange="onStateChange()"></select></div>
+<div class="fg"><span class="fl">City</span><select id="citySel" onchange="onCityChange()"></select></div>
+<div style="display:flex;gap:4px;align-self:flex-end">
+<button class="btn btn2" onclick="resetGeo()">Clear State/City</button>
+</div>
+</div>
+<div id="cityDetail"></div>
+</div>
+
+<div class="card" style="margin-bottom:12px;padding:10px 16px;display:flex;align-items:center;gap:12px">
+<h2 style="margin:0;white-space:nowrap">Weekly Breakdown</h2>
+<div class="fg"><span class="fl">Week</span><select id="weekRange" onchange="render()"></select></div>
+</div>
+<div class="row r-4" id="tblRow"></div>
+</div>
+
+<script>
+window.INVEST = {"weeks": ["2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26", "2026-02-02", "2026-02-09", "2026-02-16", "2026-02-23", "2026-03-02", "2026-03-09", "2026-03-16", "2026-03-23", "2026-03-30", "2026-04-06", "2026-04-13", "2026-04-20", "2026-04-27", "2026-05-04", "2026-05-11", "2026-05-18", "2026-05-25", "2026-06-01", "2026-06-08", "2026-06-15", "2026-06-22", "2026-06-29", "2026-07-06", "2026-07-13", "2026-07-20", "2026-07-27", "2026-08-03", "2026-08-10", "2026-08-17", "2026-08-24", "2026-08-31"], "channels": {"google": {"subtypes": {"app": {"label": "App"}, "search": {"label": "Search"}}, "series": {"app": {"spend": [12177.94, 9456.64, 6159.27, 7737.24, 8921.0, 8121.51, 6631.98, 11634.42, 5443.7, 7299.8, 9069.38, 5493.09, 7629.99, 5382.04, 11917.0, 5553.28, 6737.94, 8133.2, 14587.16, 15570.51, 13665.41, 4865.49, 3751.92, 8624.31, 3510.96, 4465.13, 4286.04, 4246.54, 5308.54, 4587.0, 3388.48, 4941.36, 4963.03, 7575.68, 4407.56, 0.0], "impr": [390507, 421438, 309914, 393843, 489753, 407411, 341351, 552336, 244903, 225585, 282058, 181099, 252235, 239143, 613828, 322145, 348745, 403242, 780456, 771740, 603201, 193620, 163577, 355514, 152914, 213453, 205883, 208585, 258655, 222704, 148764, 216109, 228349, 319744, 199045, 0], "clicks": [13528, 14126, 10037, 13661, 20730, 18212, 14959, 23684, 10622, 8871, 9596, 6157, 8324, 6679, 17250, 8723, 9347, 10168, 18674, 18844, 15601, 6115, 5328, 10668, 4481, 5964, 5866, 6243, 7879, 7279, 5673, 8215, 8142, 12467, 6982, 0], "conv": [3664, 3914, 3493, 4235, 4188, 4005, 3593, 5102, 2526, 3194, 3608, 2574, 3117, 3021, 6342, 4323, 4947, 5187, 7349, 7557, 6576, 2768, 2087, 3643, 2096, 2978, 2762, 3175, 4147, 3906, 3153, 4339, 4295, 6731, 3765, 0]}, "search": {"spend": [549.64, 4949.09, 2385.69, 5368.07, 6356.37, 5145.36, 6786.41, 5069.15, 4948.33, 5541.99, 5168.93, 5428.5, 5350.59, 5281.51, 4838.72, 4961.03, 5548.61, 5987.75, 5399.33, 7885.1, 7609.15, 14495.94, 19372.92, 24907.61, 22850.1, 18096.1, 12993.78, 17916.24, 18624.02, 15135.63, 16444.24, 18653.52, 15213.83, 11213.57, 0.0, 0.0], "impr": [16333, 122702, 63946, 76896, 73880, 78778, 99893, 75916, 73117, 77265, 79385, 88428, 96177, 87852, 86462, 92584, 84830, 90654, 98675, 129556, 116453, 151289, 276312, 334613, 339914, 288472, 223628, 275241, 291739, 250498, 250872, 300164, 250724, 127507, 0, 0], "clicks": [2974, 21336, 13192, 15696, 14206, 14768, 18176, 13800, 13496, 13235, 12896, 13506, 13483, 11743, 13253, 14524, 14267, 15087, 14590, 19267, 20039, 23633, 33898, 39776, 40737, 36542, 25510, 35451, 36712, 33557, 32237, 35668, 32708, 13214, 0, 0], "conv": [732, 4104, 3303, 3779, 3711, 3477, 4281, 3299, 3331, 3112, 3032, 3170, 3146, 2577, 2997, 3854, 3044, 3181, 3765, 4854, 4813, 5694, 7490, 8156, 8400, 8686, 5583, 7804, 8233, 6932, 7555, 8543, 7698, 2108, 0, 0]}, "all": {"spend": [12727.58, 14405.73, 8544.96, 13105.31, 15277.37, 13266.87, 13418.39, 16703.57, 10392.03, 12841.79, 14238.31, 10921.59, 12980.58, 10663.55, 16755.72, 10514.31, 12286.55, 14120.95, 19986.49, 23455.61, 21274.56, 19361.43, 23124.84, 33531.92, 26361.06, 22561.23, 17279.82, 22162.78, 23932.56, 19722.63, 19832.72, 23594.88, 20176.86, 18789.25, 4407.56, 0.0], "impr": [406840, 544140, 373860, 470739, 563633, 486189, 441244, 628252, 318020, 302850, 361443, 269527, 348412, 326995, 700290, 414729, 433575, 493896, 879131, 901296, 719654, 344909, 439889, 690127, 492828, 501925, 429511, 483826, 550394, 473202, 399636, 516273, 479073, 447251, 199045, 0], "clicks": [16502, 35462, 23229, 29357, 34936, 32980, 33135, 37484, 24118, 22106, 22492, 19663, 21807, 18422, 30503, 23247, 23614, 25255, 33264, 38111, 35640, 29748, 39226, 50444, 45218, 42506, 31376, 41694, 44591, 40836, 37910, 43883, 40850, 25681, 6982, 0], "conv": [4396, 8018, 6796, 8014, 7899, 7482, 7874, 8401, 5857, 6306, 6640, 5744, 6263, 5598, 9339, 8177, 7991, 8368, 11114, 12411, 11389, 8462, 9577, 11799, 10496, 11664, 8345, 10979, 12380, 10838, 10708, 12882, 11993, 8839, 3765, 0]}}, "states": {"app": {"Illinois": {"s": 34476.62, "c": 65911, "v": 17191, "i": 1785273}, "Texas": {"s": 10756.52, "c": 18665, "v": 10004, "i": 596872}, "Tennessee": {"s": 17443.39, "c": 22109, "v": 10962, "i": 593342}, "Ohio": {"s": 8534.96, "c": 11440, "v": 5329, "i": 381628}, "Virginia": {"s": 6522.77, "c": 9976, "v": 3661, "i": 355566}, "Kentucky": {"s": 9744.81, "c": 13271, "v": 4669, "i": 397871}, "Nebraska": {"s": 5169.13, "c": 8500, "v": 2219, "i": 281230}, "Wisconsin": {"s": 4892.12, "c": 6697, "v": 2177, "i": 215765}, "New York": {"s": 8874.2, "c": 13324, "v": 4273, "i": 457453}, "Massachusetts": {"s": 17541.67, "c": 23871, "v": 6578, "i": 667797}, "Oregon": {"s": 5180.96, "c": 7801, "v": 3325, "i": 248360}, "Arizona": {"s": 6431.61, "c": 9516, "v": 5302, "i": 320579}, "Iowa": {"s": 4034.59, "c": 5136, "v": 1515, "i": 128573}, "Michigan": {"s": 12764.24, "c": 14434, "v": 5231, "i": 451234}, "New Jersey": {"s": 1307.81, "c": 2059, "v": 877, "i": 60176}, "California": {"s": 22257.8, "c": 39684, "v": 15572, "i": 1174587}, "Pennsylvania": {"s": 12485.1, "c": 17565, "v": 7039, "i": 555297}, "New Hampshire": {"s": 10079.35, "c": 10237, "v": 2819, "i": 275294}, "Missouri": {"s": 8240.14, "c": 10021, "v": 4130, "i": 334415}, "Connecticut": {"s": 1453.85, "c": 3000, "v": 1193, "i": 93293}, "Chihuahua": {"s": 10.03, "c": 61, "v": 3, "i": 1356}, "Florida": {"s": 1409.55, "c": 2660, "v": 1536, "i": 84326}, "Indiana": {"s": 4487.85, "c": 5054, "v": 1769, "i": 164085}, "Georgia": {"s": 15547.94, "c": 23069, "v": 10036, "i": 881135}, "Alabama": {"s": 6027.42, "c": 6425, "v": 2351, "i": 200190}, "Washington": {"s": 1816.52, "c": 2720, "v": 1024, "i": 82556}, "New Mexico": {"s": 3.64, "c": 8, "v": 0, "i": 367}, "North Carolina": {"s": 4666.76, "c": 5807, "v": 3283, "i": 181833}, "Kansas": {"s": 3146.02, "c": 3953, "v": 1598, "i": 122498}, "Vermont": {"s": 45.94, "c": 76, "v": 12, "i": 1574}, "Maryland": {"s": 1585.75, "c": 1973, "v": 867, "i": 53572}, "Oklahoma": {"s": 16.59, "c": 19, "v": 9, "i": 638}, "Delaware": {"s": 304.19, "c": 385, "v": 242, "i": 19418}, "South Carolina": {"s": 1311.37, "c": 1663, "v": 639, "i": 48948}, "Rhode Island": {"s": 975.21, "c": 2200, "v": 585, "i": 59231}, "Minnesota": {"s": 5387.14, "c": 7787, "v": 3553, "i": 337364}, "North Dakota": {"s": 0.27, "c": 0, "v": 0, "i": 36}, "West Virginia": {"s": 244.11, "c": 300, "v": 85, "i": 7761}, "Montana": {"s": 107.02, "c": 343, "v": 48, "i": 8591}, "Arkansas": {"s": 372.18, "c": 487, "v": 217, "i": 10099}, "Mississippi": {"s": 409.64, "c": 550, "v": 231, "i": 11357}, "Nevada": {"s": 0.97, "c": 3, "v": 1, "i": 91}, "Louisiana": {"s": 0.77, "c": 1, "v": 0, "i": 90}, "Idaho": {"s": 0.16, "c": 2, "v": 0, "i": 20}, "Utah": {"s": 0.43, "c": 1, "v": 0, "i": 47}, "Colorado": {"s": 130.34, "c": 214, "v": 177, "i": 6867}, "South Dakota": {"s": 0.58, "c": 1, "v": 0, "i": 37}, "District of Columbia": {"s": 0.22, "c": 1, "v": 1, "i": 21}, "Maine": {"s": 35.27, "c": 49, "v": 20, "i": 1551}, "Hawaii": {"s": 0.21, "c": 1, "v": 0, "i": 23}, "Wyoming": {"s": 0.05, "c": 0, "v": 0, "i": 7}, "Alaska": {"s": 0.08, "c": 1, "v": 0, "i": 13}, "Baja California": {"s": 8.68, "c": 64, "v": 7, "i": 1542}}, "search": {"Tennessee": {"s": 29823.48, "c": 52297, "v": 10962, "i": 379529}, "Texas": {"s": 60816.8, "c": 107176, "v": 29492, "i": 744104}, "Florida": {"s": 31024.07, "c": 68432, "v": 15754, "i": 464505}, "North Carolina": {"s": 18188.59, "c": 48595, "v": 11644, "i": 318025}, "Georgia": {"s": 30296.96, "c": 93403, "v": 22469, "i": 563577}, "Arizona": {"s": 19417.14, "c": 26211, "v": 6815, "i": 218538}, "Illinois": {"s": 9437.13, "c": 18572, "v": 4057, "i": 144018}, "California": {"s": 33993.07, "c": 73162, "v": 13891, "i": 604950}, "Nevada": {"s": 1999.17, "c": 5142, "v": 1176, "i": 52522}, "New York": {"s": 11463.09, "c": 17582, "v": 3965, "i": 153966}, "Ohio": {"s": 14621.09, "c": 19312, "v": 3475, "i": 178412}, "Maryland": {"s": 5779.0, "c": 17402, "v": 3957, "i": 112017}, "Kentucky": {"s": 6888.83, "c": 12193, "v": 2507, "i": 98408}, "South Carolina": {"s": 5231.19, "c": 18764, "v": 4035, "i": 122415}, "Michigan": {"s": 2350.57, "c": 8096, "v": 1891, "i": 62675}, "Missouri": {"s": 4361.69, "c": 11492, "v": 2716, "i": 79370}, "Pennsylvania": {"s": 6511.18, "c": 17552, "v": 3241, "i": 111729}, "Virginia": {"s": 6671.95, "c": 18922, "v": 4318, "i": 119178}, "Wisconsin": {"s": 3466.51, "c": 5371, "v": 1097, "i": 50029}, "Alabama": {"s": 3161.34, "c": 9794, "v": 1901, "i": 67267}, "New Jersey": {"s": 2238.07, "c": 10473, "v": 2166, "i": 66723}, "Colorado": {"s": 645.38, "c": 2880, "v": 618, "i": 21776}, "District of Columbia": {"s": 2711.63, "c": 2674, "v": 555, "i": 26324}, "Minnesota": {"s": 1309.84, "c": 5355, "v": 907, "i": 38231}, "Mississippi": {"s": 3267.97, "c": 6806, "v": 2012, "i": 42683}, "Oregon": {"s": 1093.26, "c": 2165, "v": 413, "i": 14690}, "Massachusetts": {"s": 4962.19, "c": 7777, "v": 1284, "i": 62475}, "Washington": {"s": 894.0, "c": 4058, "v": 580, "i": 37427}, "Indiana": {"s": 1173.93, "c": 3502, "v": 642, "i": 24355}, "Connecticut": {"s": 3771.06, "c": 7406, "v": 1440, "i": 56840}, "Rhode Island": {"s": 354.84, "c": 1361, "v": 226, "i": 8476}, "Arkansas": {"s": 1053.82, "c": 2900, "v": 611, "i": 16484}, "Kansas": {"s": 1702.48, "c": 3775, "v": 683, "i": 32010}, "Nebraska": {"s": 1535.73, "c": 1555, "v": 366, "i": 14718}, "Delaware": {"s": 585.53, "c": 3162, "v": 717, "i": 13333}, "Iowa": {"s": 341.96, "c": 1177, "v": 289, "i": 5442}, "Oklahoma": {"s": 238.15, "c": 1004, "v": 195, "i": 4631}, "Louisiana": {"s": 410.83, "c": 1879, "v": 853, "i": 7809}, "West Virginia": {"s": 52.23, "c": 429, "v": 62, "i": 2291}, "Hawaii": {"s": 31.43, "c": 96, "v": 7, "i": 636}, "New Hampshire": {"s": 2232.18, "c": 1594, "v": 121, "i": 18523}, "Utah": {"s": 130.3, "c": 533, "v": 123, "i": 2834}, "New Mexico": {"s": 57.6, "c": 286, "v": 72, "i": 1575}, "Idaho": {"s": 20.4, "c": 162, "v": 37, "i": 905}, "Vermont": {"s": 23.39, "c": 64, "v": 4, "i": 633}, "Montana": {"s": 11.82, "c": 85, "v": 14, "i": 433}, "Wyoming": {"s": 7.96, "c": 52, "v": 4, "i": 279}, "Maine": {"s": 59.43, "c": 190, "v": 48, "i": 1000}, "South Dakota": {"s": 18.59, "c": 101, "v": 13, "i": 504}, "Alaska": {"s": 3.99, "c": 44, "v": 9, "i": 316}, "North Dakota": {"s": 8.57, "c": 74, "v": 5, "i": 464}, "State of Sao Paulo": {"s": 0.0, "c": 0, "v": 0, "i": 28}, "State of Mexico": {"s": 0.25, "c": 1, "v": 0, "i": 4}, "Telangana": {"s": 1.32, "c": 6, "v": 0, "i": 33}, "Tamaulipas": {"s": 0.0, "c": 0, "v": 0, "i": 4}, "State of Rio de Janeiro": {"s": 0.41, "c": 1, "v": 0, "i": 24}, "San Luis Potosi": {"s": 0.0, "c": 0, "v": 0, "i": 2}, "State of Santa Catarina": {"s": 0.0, "c": 0, "v": 0, "i": 8}, "Morelos": {"s": 0.1, "c": 1, "v": 0, "i": 2}, "Hessen": {"s": 0.0, "c": 0, "v": 0, "i": 2}, "Puebla": {"s": 0.0, "c": 0, "v": 0, "i": 1}, "West Bengal": {"s": 0.48, "c": 3, "v": 0, "i": 21}, "Lagos": {"s": 0.18, "c": 1, "v": 0, "i": 36}, "State of Parana": {"s": 0.0, "c": 0, "v": 0, "i": 7}, "Kwara": {"s": 0.0, "c": 0, "v": 0, "i": 2}, "Coahuila": {"s": 0.0, "c": 0, "v": 0, "i": 7}, "Queretaro": {"s": 0.0, "c": 0, "v": 0, "i": 5}, "State of Bahia": {"s": 0.0, "c": 0, "v": 0, "i": 1}, "Maharashtra": {"s": 3.64, "c": 12, "v": 1, "i": 59}, "Mexico City": {"s": 0.0, "c": 0, "v": 0, "i": 5}, "Baja California": {"s": 0.0, "c": 0, "v": 0, "i": 7}, "Karnataka": {"s": 2.29, "c": 4, "v": 0, "i": 34}, "Tamil Nadu": {"s": 2.18, "c": 4, "v": 0, "i": 32}, "Nuevo Leon": {"s": 0.0, "c": 0, "v": 0, "i": 5}, "Jalisco": {"s": 0.0, "c": 0, "v": 0, "i": 2}, "Guerrero": {"s": 0.0, "c": 0, "v": 0, "i": 4}, "State of Minas Gerais": {"s": 0.49, "c": 1, "v": 0, "i": 7}, "Uttar Pradesh": {"s": 1.96, "c": 12, "v": 0, "i": 77}, "Aguascalientes": {"s": 0.0, "c": 0, "v": 0, "i": 2}, "Berlin": {"s": 0.16, "c": 1, "v": 0, "i": 10}, "Punjab": {"s": 0.1, "c": 1, "v": 0, "i": 11}, "Michoacan": {"s": 0.0, "c": 0, "v": 0, "i": 1}, "State of Tocantins": {"s": 0.0, "c": 0, "v": 0, "i": 1}, "Guanajuato": {"s": 0.0, "c": 0, "v": 0, "i": 1}, "Gujarat": {"s": 1.71, "c": 7, "v": 0, "i": 23}, "Rajasthan": {"s": 0.28, "c": 1, "v": 0, "i": 15}, "Andhra Pradesh": {"s": 0.0, "c": 0, "v": 0, "i": 15}, "Bihar": {"s": 0.3, "c": 4, "v": 0, "i": 19}, "Kerala": {"s": 0.56, "c": 2, "v": 0, "i": 22}, "Madhya Pradesh": {"s": 0.31, "c": 2, "v": 1, "i": 14}, "Jharkhand": {"s": 0.0, "c": 0, "v": 0, "i": 11}, "Uttarakhand": {"s": 0.0, "c": 0, "v": 0, "i": 5}, "Enugu": {"s": 0.97, "c": 2, "v": 0, "i": 2}, "Assam": {"s": 0.07, "c": 1, "v": 0, "i": 3}, "Selangor": {"s": 0.13, "c": 1, "v": 0, "i": 9}, "Negeri Sembilan": {"s": 0.0, "c": 0, "v": 0, "i": 5}, "Tabasco": {"s": 0.0, "c": 0, "v": 0, "i": 2}, "Western Australia": {"s": 0.0, "c": 0, "v": 0, "i": 3}, "Victoria": {"s": 0.39, "c": 1, "v": 0, "i": 8}, "Haryana": {"s": 1.8, "c": 6, "v": 0, "i": 17}, "Odisha": {"s": 0.47, "c": 2, "v": 0, "i": 8}, "Lower Saxony": {"s": 0.0, "c": 0, "v": 0, "i": 2}, "Jammu and Kashmir": {"s": 0.0, "c": 0, "v": 0, "i": 3}, "Federal Territory of Kuala Lumpur": {"s": 0.0, "c": 0, "v": 0, "i": 8}, "Goa": {"s": 0.0, "c": 0, "v": 0, "i": 1}, "Chhattisgarh": {"s": 0.0, "c": 0, "v": 0, "i": 1}, "Rivers": {"s": 1.72, "c": 6, "v": 0, "i": 14}, "Federal Capital Territory": {"s": 0.17, "c": 1, "v": 1, "i": 4}, "Johor": {"s": 0.0, "c": 0, "v": 0, "i": 6}, "Edo": {"s": 0.0, "c": 0, "v": 0, "i": 2}, "Hamburg": {"s": 1.63, "c": 1, "v": 0, "i": 2}, "Kano": {"s": 0.0, "c": 0, "v": 0, "i": 2}, "Anambra": {"s": 0.0, "c": 0, "v": 0, "i": 2}, "Terengganu": {"s": 0.0, "c": 0, "v": 0, "i": 2}, "Abia": {"s": 0.0, "c": 0, "v": 0, "i": 1}, "Tripura": {"s": 0.0, "c": 0, "v": 0, "i": 1}, "Malacca": {"s": 0.0, "c": 0, "v": 0, "i": 1}, "State of Sergipe": {"s": 0.0, "c": 0, "v": 0, "i": 1}, "Perak": {"s": 0.4, "c": 1, "v": 0, "i": 3}, "New South Wales": {"s": 0.0, "c": 0, "v": 0, "i": 2}, "Brandenburg": {"s": 0.0, "c": 0, "v": 0, "i": 1}, "Sikkim": {"s": 0.0, "c": 0, "v": 0, "i": 1}, "Saxony-Anhalt": {"s": 0.0, "c": 0, "v": 0, "i": 1}, "Oyo": {"s": 0.18, "c": 1, "v": 0, "i": 2}, "Thuringia": {"s": 0.0, "c": 0, "v": 0, "i": 1}, "Pahang": {"s": 0.0, "c": 0, "v": 0, "i": 1}, "Plateau": {"s": 0.0, "c": 0, "v": 0, "i": 1}, "Khartoum": {"s": 0.0, "c": 0, "v": 0, "i": 1}, "Nagaland": {"s": 0.0, "c": 0, "v": 0, "i": 1}, "Delta": {"s": 0.0, "c": 0, "v": 0, "i": 1}, "Osun": {"s": 0.0, "c": 0, "v": 0, "i": 1}, "North Rhine-Westphalia": {"s": 0.0, "c": 0, "v": 0, "i": 1}, "Red Sea": {"s": 0.76, "c": 1, "v": 0, "i": 1}, "Sabah": {"s": 0.0, "c": 0, "v": 0, "i": 1}, "Himachal Pradesh": {"s": 0.0, "c": 0, "v": 0, "i": 1}, "Saxony": {"s": 0.0, "c": 0, "v": 0, "i": 1}}, "all": {"Illinois": {"s": 43913.75, "c": 84483, "v": 21248, "i": 1929291}, "Texas": {"s": 71573.32, "c": 125841, "v": 39496, "i": 1340976}, "Tennessee": {"s": 47266.87, "c": 74406, "v": 21924, "i": 972871}, "Ohio": {"s": 23156.05, "c": 30752, "v": 8804, "i": 560040}, "Virginia": {"s": 13194.72, "c": 28898, "v": 7979, "i": 474744}, "Kentucky": {"s": 16633.64, "c": 25464, "v": 7176, "i": 496279}, "Nebraska": {"s": 6704.86, "c": 10055, "v": 2585, "i": 295948}, "Wisconsin": {"s": 8358.63, "c": 12068, "v": 3274, "i": 265794}, "New York": {"s": 20337.29, "c": 30906, "v": 8238, "i": 611419}, "Massachusetts": {"s": 22503.86, "c": 31648, "v": 7862, "i": 730272}, "Oregon": {"s": 6274.22, "c": 9966, "v": 3738, "i": 263050}, "Arizona": {"s": 25848.75, "c": 35727, "v": 12117, "i": 539117}, "Iowa": {"s": 4376.55, "c": 6313, "v": 1804, "i": 134015}, "Michigan": {"s": 15114.81, "c": 22530, "v": 7122, "i": 513909}, "New Jersey": {"s": 3545.88, "c": 12532, "v": 3043, "i": 126899}, "California": {"s": 56250.87, "c": 112846, "v": 29463, "i": 1779537}, "Pennsylvania": {"s": 18996.28, "c": 35117, "v": 10280, "i": 667026}, "New Hampshire": {"s": 12311.53, "c": 11831, "v": 2940, "i": 293817}, "Missouri": {"s": 12601.83, "c": 21513, "v": 6846, "i": 413785}, "Connecticut": {"s": 5224.91, "c": 10406, "v": 2633, "i": 150133}, "Chihuahua": {"s": 10.03, "c": 61, "v": 3, "i": 1356}, "Florida": {"s": 32433.62, "c": 71092, "v": 17290, "i": 548831}, "Indiana": {"s": 5661.78, "c": 8556, "v": 2411, "i": 188440}, "Georgia": {"s": 45844.9, "c": 116472, "v": 32505, "i": 1444712}, "Alabama": {"s": 9188.76, "c": 16219, "v": 4252, "i": 267457}, "Washington": {"s": 2710.52, "c": 6778, "v": 1604, "i": 119983}, "New Mexico": {"s": 61.24, "c": 294, "v": 72, "i": 1942}, "North Carolina": {"s": 22855.35, "c": 54402, "v": 14927, "i": 499858}, "Kansas": {"s": 4848.5, "c": 7728, "v": 2281, "i": 154508}, "Vermont": {"s": 69.33, "c": 140, "v": 16, "i": 2207}, "Maryland": {"s": 7364.75, "c": 19375, "v": 4824, "i": 165589}, "Oklahoma": {"s": 254.74, "c": 1023, "v": 204, "i": 5269}, "Delaware": {"s": 889.72, "c": 3547, "v": 959, "i": 32751}, "South Carolina": {"s": 6542.56, "c": 20427, "v": 4674, "i": 171363}, "Rhode Island": {"s": 1330.05, "c": 3561, "v": 811, "i": 67707}, "Minnesota": {"s": 6696.98, "c": 13142, "v": 4460, "i": 375595}, "North Dakota": {"s": 8.84, "c": 74, "v": 5, "i": 500}, "West Virginia": {"s": 296.34, "c": 729, "v": 146, "i": 10052}, "Montana": {"s": 118.84, "c": 428, "v": 62, "i": 9024}, "Arkansas": {"s": 1426.0, "c": 3387, "v": 828, "i": 26583}, "Mississippi": {"s": 3677.61, "c": 7356, "v": 2243, "i": 54040}, "Nevada": {"s": 2000.14, "c": 5145, "v": 1177, "i": 52613}, "Louisiana": {"s": 411.6, "c": 1880, "v": 853, "i": 7899}, "Idaho": {"s": 20.56, "c": 164, "v": 37, "i": 925}, "Utah": {"s": 130.73, "c": 534, "v": 123, "i": 2881}, "Colorado": {"s": 775.72, "c": 3094, "v": 795, "i": 28643}, "South Dakota": {"s": 19.17, "c": 102, "v": 13, "i": 541}, "District of Columbia": {"s": 2711.85, "c": 2675, "v": 556, "i": 26345}, "Maine": {"s": 94.7, "c": 239, "v": 68, "i": 2551}, "Hawaii": {"s": 31.64, "c": 97, "v": 7, "i": 659}, "Wyoming": {"s": 8.01, "c": 52, "v": 4, "i": 286}, "Alaska": {"s": 4.07, "c": 45, "v": 9, "i": 329}, "Baja California": {"s": 8.68, "c": 64, "v": 7, "i": 1549}, "State of Sao Paulo": {"s": 0.0, "c": 0, "v": 0, "i": 28}, "State of Mexico": {"s": 0.25, "c": 1, "v": 0, "i": 4}, "Telangana": {"s": 1.32, "c": 6, "v": 0, "i": 33}, "Tamaulipas": {"s": 0.0, "c": 0, "v": 0, "i": 4}, "State of Rio de Janeiro": {"s": 0.41, "c": 1, "v": 0, "i": 24}, "San Luis Potosi": {"s": 0.0, "c": 0, "v": 0, "i": 2}, "State of Santa Catarina": {"s": 0.0, "c": 0, "v": 0, "i": 8}, "Morelos": {"s": 0.1, "c": 1, "v": 0, "i": 2}, "Hessen": {"s": 0.0, "c": 0, "v": 0, "i": 2}, "Puebla": {"s": 0.0, "c": 0, "v": 0, "i": 1}, "West Bengal": {"s": 0.48, "c": 3, "v": 0, "i": 21}, "Lagos": {"s": 0.18, "c": 1, "v": 0, "i": 36}, "State of Parana": {"s": 0.0, "c": 0, "v": 0, "i": 7}, "Kwara": {"s": 0.0, "c": 0, "v": 0, "i": 2}, "Coahuila": {"s": 0.0, "c": 0, "v": 0, "i": 7}, "Queretaro": {"s": 0.0, "c": 0, "v": 0, "i": 5}, "State of Bahia": {"s": 0.0, "c": 0, "v": 0, "i": 1}, "Maharashtra": {"s": 3.64, "c": 12, "v": 1, "i": 59}, "Mexico City": {"s": 0.0, "c": 0, "v": 0, "i": 5}, "Karnataka": {"s": 2.29, "c": 4, "v": 0, "i": 34}, "Tamil Nadu": {"s": 2.18, "c": 4, "v": 0, "i": 32}, "Nuevo Leon": {"s": 0.0, "c": 0, "v": 0, "i": 5}, "Jalisco": {"s": 0.0, "c": 0, "v": 0, "i": 2}, "Guerrero": {"s": 0.0, "c": 0, "v": 0, "i": 4}, "State of Minas Gerais": {"s": 0.49, "c": 1, "v": 0, "i": 7}, "Uttar Pradesh": {"s": 1.96, "c": 12, "v": 0, "i": 77}, "Aguascalientes": {"s": 0.0, "c": 0, "v": 0, "i": 2}, "Berlin": {"s": 0.16, "c": 1, "v": 0, "i": 10}, "Punjab": {"s": 0.1, "c": 1, "v": 0, "i": 11}, "Michoacan": {"s": 0.0, "c": 0, "v": 0, "i": 1}, "State of Tocantins": {"s": 0.0, "c": 0, "v": 0, "i": 1}, "Guanajuato": {"s": 0.0, "c": 0, "v": 0, "i": 1}, "Gujarat": {"s": 1.71, "c": 7, "v": 0, "i": 23}, "Rajasthan": {"s": 0.28, "c": 1, "v": 0, "i": 15}, "Andhra Pradesh": {"s": 0.0, "c": 0, "v": 0, "i": 15}, "Bihar": {"s": 0.3, "c": 4, "v": 0, "i": 19}, "Kerala": {"s": 0.56, "c": 2, "v": 0, "i": 22}, "Madhya Pradesh": {"s": 0.31, "c": 2, "v": 1, "i": 14}, "Jharkhand": {"s": 0.0, "c": 0, "v": 0, "i": 11}, "Uttarakhand": {"s": 0.0, "c": 0, "v": 0, "i": 5}, "Enugu": {"s": 0.97, "c": 2, "v": 0, "i": 2}, "Assam": {"s": 0.07, "c": 1, "v": 0, "i": 3}, "Selangor": {"s": 0.13, "c": 1, "v": 0, "i": 9}, "Negeri Sembilan": {"s": 0.0, "c": 0, "v": 0, "i": 5}, "Tabasco": {"s": 0.0, "c": 0, "v": 0, "i": 2}, "Western Australia": {"s": 0.0, "c": 0, "v": 0, "i": 3}, "Victoria": {"s": 0.39, "c": 1, "v": 0, "i": 8}, "Haryana": {"s": 1.8, "c": 6, "v": 0, "i": 17}, "Odisha": {"s": 0.47, "c": 2, "v": 0, "i": 8}, "Lower Saxony": {"s": 0.0, "c": 0, "v": 0, "i": 2}, "Jammu and Kashmir": {"s": 0.0, "c": 0, "v": 0, "i": 3}, "Federal Territory of Kuala Lumpur": {"s": 0.0, "c": 0, "v": 0, "i": 8}, "Goa": {"s": 0.0, "c": 0, "v": 0, "i": 1}, "Chhattisgarh": {"s": 0.0, "c": 0, "v": 0, "i": 1}, "Rivers": {"s": 1.72, "c": 6, "v": 0, "i": 14}, "Federal Capital Territory": {"s": 0.17, "c": 1, "v": 1, "i": 4}, "Johor": {"s": 0.0, "c": 0, "v": 0, "i": 6}, "Edo": {"s": 0.0, "c": 0, "v": 0, "i": 2}, "Hamburg": {"s": 1.63, "c": 1, "v": 0, "i": 2}, "Kano": {"s": 0.0, "c": 0, "v": 0, "i": 2}, "Anambra": {"s": 0.0, "c": 0, "v": 0, "i": 2}, "Terengganu": {"s": 0.0, "c": 0, "v": 0, "i": 2}, "Abia": {"s": 0.0, "c": 0, "v": 0, "i": 1}, "Tripura": {"s": 0.0, "c": 0, "v": 0, "i": 1}, "Malacca": {"s": 0.0, "c": 0, "v": 0, "i": 1}, "State of Sergipe": {"s": 0.0, "c": 0, "v": 0, "i": 1}, "Perak": {"s": 0.4, "c": 1, "v": 0, "i": 3}, "New South Wales": {"s": 0.0, "c": 0, "v": 0, "i": 2}, "Brandenburg": {"s": 0.0, "c": 0, "v": 0, "i": 1}, "Sikkim": {"s": 0.0, "c": 0, "v": 0, "i": 1}, "Saxony-Anhalt": {"s": 0.0, "c": 0, "v": 0, "i": 1}, "Oyo": {"s": 0.18, "c": 1, "v": 0, "i": 2}, "Thuringia": {"s": 0.0, "c": 0, "v": 0, "i": 1}, "Pahang": {"s": 0.0, "c": 0, "v": 0, "i": 1}, "Plateau": {"s": 0.0, "c": 0, "v": 0, "i": 1}, "Khartoum": {"s": 0.0, "c": 0, "v": 0, "i": 1}, "Nagaland": {"s": 0.0, "c": 0, "v": 0, "i": 1}, "Delta": {"s": 0.0, "c": 0, "v": 0, "i": 1}, "Osun": {"s": 0.0, "c": 0, "v": 0, "i": 1}, "North Rhine-Westphalia": {"s": 0.0, "c": 0, "v": 0, "i": 1}, "Red Sea": {"s": 0.76, "c": 1, "v": 0, "i": 1}, "Sabah": {"s": 0.0, "c": 0, "v": 0, "i": 1}, "Himachal Pradesh": {"s": 0.0, "c": 0, "v": 0, "i": 1}, "Saxony": {"s": 0.0, "c": 0, "v": 0, "i": 1}}}}, "meta": {"subtypes": {"app": {"label": "App"}, "nonapp": {"label": "Nonapp"}}, "series": {"app": {"spend": [2240.43, 4058.21, 5017.42, 3310.68, 1347.19, 3835.18, 7218.21, 3600.4, 2360.44, 3679.09, 3048.31, 5804.9, 2914.08, 3237.06, 5846.64, 5781.21, 14943.24, 1430.89, 12435.36, 19423.07, 8343.12, 5373.63, 4838.97, 8516.72, 6595.04, 2291.41, 4641.89, 5155.43, 6122.54, 4532.49, 5296.04, 5319.97, 5589.46, 6247.12, 1422.97, 0.0], "impr": [163015, 306779, 397546, 252045, 91964, 267236, 559554, 266143, 126707, 211759, 178622, 279111, 125719, 162107, 298782, 311955, 777655, 77372, 688866, 994474, 452565, 316830, 267682, 518999, 372176, 135403, 325382, 319837, 379377, 291891, 309531, 318254, 315859, 343233, 83551, 0], "clicks": [1060, 2006, 2616, 1685, 706, 1735, 3822, 1739, 1047, 2186, 1892, 2306, 1250, 1832, 3040, 3072, 7174, 676, 6186, 8959, 4687, 3518, 3042, 5314, 3981, 2055, 3789, 4116, 6056, 5362, 6602, 5633, 6340, 6084, 738, 0], "conv": [537, 983, 1539, 891, 420, 848, 2110, 884, 503, 1037, 923, 1195, 670, 961, 1663, 1753, 4081, 281, 3441, 4487, 1447, 873, 867, 1742, 1383, 487, 916, 1068, 1033, 501, 392, 775, 809, 1432, 171, 0]}, "nonapp": {"spend": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1983.9, 1984.83, 0.0], "impr": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 124366, 133947, 0], "clicks": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4708, 5222, 0], "conv": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 49, 0, 0]}, "all": {"spend": [2240.43, 4058.21, 5017.42, 3310.68, 1347.19, 3835.18, 7218.21, 3600.4, 2360.44, 3679.09, 3048.31, 5804.9, 2914.08, 3237.06, 5846.64, 5781.21, 14943.24, 1430.89, 12435.36, 19423.07, 8343.12, 5373.63, 4838.97, 8516.72, 6595.04, 2291.41, 4641.89, 5155.43, 6122.54, 4532.49, 5296.04, 5319.97, 5589.46, 8231.02, 3407.8, 0.0], "impr": [163015, 306779, 397546, 252045, 91964, 267236, 559554, 266143, 126707, 211759, 178622, 279111, 125719, 162107, 298782, 311955, 777655, 77372, 688866, 994474, 452565, 316830, 267682, 518999, 372176, 135403, 325382, 319837, 379377, 291891, 309531, 318254, 315859, 467599, 217498, 0], "clicks": [1060, 2006, 2616, 1685, 706, 1735, 3822, 1739, 1047, 2186, 1892, 2306, 1250, 1832, 3040, 3072, 7174, 676, 6186, 8959, 4687, 3518, 3042, 5314, 3981, 2055, 3789, 4116, 6056, 5362, 6602, 5633, 6340, 10792, 5960, 0], "conv": [537, 983, 1539, 891, 420, 848, 2110, 884, 503, 1037, 923, 1195, 670, 961, 1663, 1753, 4081, 281, 3441, 4487, 1447, 873, 867, 1742, 1383, 487, 916, 1068, 1033, 501, 392, 775, 809, 1481, 171, 0]}}, "states": {"app": {"Pennsylvania": {"s": 11828.61, "c": 5323, "v": 2480, "i": 639907}, "Tennessee": {"s": 18634.74, "c": 9973, "v": 3435, "i": 1169404}, "Iowa": {"s": 4953.38, "c": 1728, "v": 660, "i": 293329}, "California": {"s": 9136.21, "c": 7556, "v": 3069, "i": 514177}, "Virginia": {"s": 6041.88, "c": 5613, "v": 1341, "i": 383821}, "Illinois": {"s": 18572.48, "c": 12383, "v": 4290, "i": 1276470}, "Nebraska": {"s": 2869.6, "c": 1374, "v": 523, "i": 172768}, "Missouri": {"s": 6230.47, "c": 2272, "v": 1167, "i": 339309}, "Maryland": {"s": 3377.78, "c": 2035, "v": 677, "i": 188248}, "Texas": {"s": 9180.41, "c": 10900, "v": 3679, "i": 537268}, "Minnesota": {"s": 2735.27, "c": 1613, "v": 843, "i": 144501}, "Arizona": {"s": 3395.31, "c": 2878, "v": 1894, "i": 203188}, "Massachusetts": {"s": 15876.91, "c": 9649, "v": 1400, "i": 1005011}, "North Carolina": {"s": 3675.29, "c": 1992, "v": 778, "i": 206825}, "Kentucky": {"s": 6866.68, "c": 3995, "v": 1671, "i": 404638}, "Kansas": {"s": 2913.7, "c": 962, "v": 512, "i": 184667}, "Mississippi": {"s": 749.1, "c": 321, "v": 214, "i": 43922}, "New Hampshire": {"s": 8751.54, "c": 5837, "v": 436, "i": 532961}, "Indiana": {"s": 2241.36, "c": 1160, "v": 552, "i": 120472}, "South Carolina": {"s": 1135.79, "c": 605, "v": 305, "i": 79001}, "Arkansas": {"s": 500.15, "c": 224, "v": 117, "i": 29851}, "Rhode Island": {"s": 533.59, "c": 284, "v": 138, "i": 29393}, "Michigan": {"s": 7936.96, "c": 2769, "v": 1248, "i": 432919}, "Wisconsin": {"s": 2178.55, "c": 1136, "v": 696, "i": 137841}, "Georgia": {"s": 8911.88, "c": 7063, "v": 2250, "i": 437679}, "Vermont": {"s": 80.42, "c": 30, "v": 5, "i": 4660}, "West Virginia": {"s": 206.33, "c": 191, "v": 15, "i": 11989}, "Maine": {"s": 93.66, "c": 57, "v": 10, "i": 4671}, "Alabama": {"s": 4468.71, "c": 1724, "v": 997, "i": 237486}, "Oklahoma": {"s": 40.28, "c": 40, "v": 24, "i": 2449}, "Connecticut": {"s": 1609.05, "c": 1011, "v": 570, "i": 90037}, "Unknown": {"s": 1.09, "c": 0, "v": 21, "i": 93}, "Nevada": {"s": 18.14, "c": 31, "v": 16, "i": 1181}, "New York": {"s": 10764.79, "c": 7128, "v": 2165, "i": 610647}, "Oregon": {"s": 3992.12, "c": 2073, "v": 1020, "i": 218327}, "New Jersey": {"s": 1761.67, "c": 1492, "v": 664, "i": 101155}, "Ohio": {"s": 5341.96, "c": 4685, "v": 1581, "i": 290017}, "Florida": {"s": 2342.93, "c": 2783, "v": 877, "i": 111092}, "Baja California": {"s": 0.01, "c": 0, "v": 0, "i": 1}, "Washington, District of Columbia": {"s": 51.44, "c": 73, "v": 3, "i": 2183}, "Washington": {"s": 1016.55, "c": 775, "v": 467, "i": 54879}, "Delaware": {"s": 659.44, "c": 360, "v": 178, "i": 31880}, "Ontario": {"s": 4.78, "c": 2, "v": 1, "i": 273}, "Colorado": {"s": 95.67, "c": 126, "v": 71, "i": 4501}, "Louisiana": {"s": 16.05, "c": 24, "v": 18, "i": 1214}, "Utah": {"s": 9.38, "c": 21, "v": 8, "i": 590}, "Hawaii": {"s": 3.02, "c": 5, "v": 0, "i": 160}, "Idaho": {"s": 3.65, "c": 5, "v": 3, "i": 193}, "North Dakota": {"s": 1.36, "c": 1, "v": 0, "i": 68}, "Alaska": {"s": 1.11, "c": 3, "v": 2, "i": 52}, "New Mexico": {"s": 3.69, "c": 6, "v": 2, "i": 329}, "Montana": {"s": 1.2, "c": 2, "v": 2, "i": 106}, "Wyoming": {"s": 1.04, "c": 5, "v": 4, "i": 66}, "South Dakota": {"s": 1.66, "c": 8, "v": 4, "i": 112}}, "nonapp": {"Alabama": {"s": 6.31, "c": 6, "v": 0, "i": 382}, "Arizona": {"s": 43.76, "c": 151, "v": 0, "i": 2819}, "Arkansas": {"s": 0.67, "c": 2, "v": 0, "i": 39}, "California": {"s": 144.53, "c": 490, "v": 0, "i": 9636}, "Delaware": {"s": 4.61, "c": 22, "v": 0, "i": 329}, "Florida": {"s": 412.32, "c": 722, "v": 29, "i": 20649}, "Georgia": {"s": 309.45, "c": 843, "v": 0, "i": 25559}, "Illinois": {"s": 991.99, "c": 2601, "v": 0, "i": 66159}, "Indiana": {"s": 2.48, "c": 20, "v": 0, "i": 157}, "Kansas": {"s": 4.29, "c": 16, "v": 0, "i": 322}, "Kentucky": {"s": 0.05, "c": 0, "v": 0, "i": 5}, "Maine": {"s": 3.77, "c": 19, "v": 0, "i": 295}, "Maryland": {"s": 45.19, "c": 167, "v": 0, "i": 3107}, "Massachusetts": {"s": 158.54, "c": 326, "v": 0, "i": 9283}, "Minnesota": {"s": 23.74, "c": 81, "v": 0, "i": 1658}, "Mississippi": {"s": 1.14, "c": 6, "v": 0, "i": 73}, "Missouri": {"s": 27.86, "c": 71, "v": 0, "i": 1269}, "New Hampshire": {"s": 182.91, "c": 219, "v": 0, "i": 10183}, "New Jersey": {"s": 22.13, "c": 85, "v": 0, "i": 1438}, "North Carolina": {"s": 53.11, "c": 171, "v": 0, "i": 3898}, "Pennsylvania": {"s": 39.38, "c": 150, "v": 0, "i": 2778}, "Rhode Island": {"s": 5.48, "c": 17, "v": 0, "i": 364}, "South Carolina": {"s": 3.66, "c": 7, "v": 0, "i": 281}, "Tennessee": {"s": 165.6, "c": 382, "v": 0, "i": 13032}, "Texas": {"s": 534.93, "c": 1749, "v": 0, "i": 35530}, "Virginia": {"s": 97.39, "c": 417, "v": 20, "i": 8826}, "Washington, District of Columbia": {"s": 13.79, "c": 49, "v": 0, "i": 978}, "Wisconsin": {"s": 0.35, "c": 0, "v": 0, "i": 31}, "Louisiana": {"s": 0.08, "c": 0, "v": 0, "i": 6}, "New York": {"s": 292.63, "c": 361, "v": 0, "i": 16334}, "Ohio": {"s": 366.08, "c": 775, "v": 0, "i": 22387}, "Unknown": {"s": 0.23, "c": 0, "v": 0, "i": 4}, "Vermont": {"s": 10.29, "c": 5, "v": 0, "i": 502}}, "all": {"Pennsylvania": {"s": 11867.99, "c": 5473, "v": 2480, "i": 642685}, "Tennessee": {"s": 18800.34, "c": 10355, "v": 3435, "i": 1182436}, "Iowa": {"s": 4953.38, "c": 1728, "v": 660, "i": 293329}, "California": {"s": 9280.73, "c": 8046, "v": 3069, "i": 523813}, "Virginia": {"s": 6139.27, "c": 6030, "v": 1361, "i": 392647}, "Illinois": {"s": 19564.47, "c": 14984, "v": 4290, "i": 1342629}, "Nebraska": {"s": 2869.6, "c": 1374, "v": 523, "i": 172768}, "Missouri": {"s": 6258.33, "c": 2343, "v": 1167, "i": 340578}, "Maryland": {"s": 3422.97, "c": 2202, "v": 677, "i": 191355}, "Texas": {"s": 9715.33, "c": 12649, "v": 3679, "i": 572798}, "Minnesota": {"s": 2759.01, "c": 1694, "v": 843, "i": 146159}, "Arizona": {"s": 3439.07, "c": 3029, "v": 1894, "i": 206007}, "Massachusetts": {"s": 16035.46, "c": 9975, "v": 1400, "i": 1014294}, "North Carolina": {"s": 3728.4, "c": 2163, "v": 778, "i": 210723}, "Kentucky": {"s": 6866.73, "c": 3995, "v": 1671, "i": 404643}, "Kansas": {"s": 2917.99, "c": 978, "v": 512, "i": 184989}, "Mississippi": {"s": 750.24, "c": 327, "v": 214, "i": 43995}, "New Hampshire": {"s": 8934.45, "c": 6056, "v": 436, "i": 543144}, "Indiana": {"s": 2243.84, "c": 1180, "v": 552, "i": 120629}, "South Carolina": {"s": 1139.45, "c": 612, "v": 305, "i": 79282}, "Arkansas": {"s": 500.82, "c": 226, "v": 117, "i": 29890}, "Rhode Island": {"s": 539.07, "c": 301, "v": 138, "i": 29757}, "Michigan": {"s": 7936.96, "c": 2769, "v": 1248, "i": 432919}, "Wisconsin": {"s": 2178.9, "c": 1136, "v": 696, "i": 137872}, "Georgia": {"s": 9221.34, "c": 7906, "v": 2250, "i": 463238}, "Vermont": {"s": 90.71, "c": 35, "v": 5, "i": 5162}, "West Virginia": {"s": 206.33, "c": 191, "v": 15, "i": 11989}, "Maine": {"s": 97.43, "c": 76, "v": 10, "i": 4966}, "Alabama": {"s": 4475.02, "c": 1730, "v": 997, "i": 237868}, "Oklahoma": {"s": 40.28, "c": 40, "v": 24, "i": 2449}, "Connecticut": {"s": 1609.05, "c": 1011, "v": 570, "i": 90037}, "Unknown": {"s": 1.32, "c": 0, "v": 21, "i": 97}, "Nevada": {"s": 18.14, "c": 31, "v": 16, "i": 1181}, "New York": {"s": 11057.42, "c": 7489, "v": 2165, "i": 626981}, "Oregon": {"s": 3992.12, "c": 2073, "v": 1020, "i": 218327}, "New Jersey": {"s": 1783.8, "c": 1577, "v": 664, "i": 102593}, "Ohio": {"s": 5708.04, "c": 5460, "v": 1581, "i": 312404}, "Florida": {"s": 2755.24, "c": 3505, "v": 906, "i": 131741}, "Baja California": {"s": 0.01, "c": 0, "v": 0, "i": 1}, "Washington, District of Columbia": {"s": 65.23, "c": 122, "v": 3, "i": 3161}, "Washington": {"s": 1016.55, "c": 775, "v": 467, "i": 54879}, "Delaware": {"s": 664.05, "c": 382, "v": 178, "i": 32209}, "Ontario": {"s": 4.78, "c": 2, "v": 1, "i": 273}, "Colorado": {"s": 95.67, "c": 126, "v": 71, "i": 4501}, "Louisiana": {"s": 16.13, "c": 24, "v": 18, "i": 1220}, "Utah": {"s": 9.38, "c": 21, "v": 8, "i": 590}, "Hawaii": {"s": 3.02, "c": 5, "v": 0, "i": 160}, "Idaho": {"s": 3.65, "c": 5, "v": 3, "i": 193}, "North Dakota": {"s": 1.36, "c": 1, "v": 0, "i": 68}, "Alaska": {"s": 1.11, "c": 3, "v": 2, "i": 52}, "New Mexico": {"s": 3.69, "c": 6, "v": 2, "i": 329}, "Montana": {"s": 1.2, "c": 2, "v": 2, "i": 106}, "Wyoming": {"s": 1.04, "c": 5, "v": 4, "i": 66}, "South Dakota": {"s": 1.66, "c": 8, "v": 4, "i": 112}}}}, "indeed": {"subtypes": {}, "series": {"all": {"spend": [2887.88, 6568.53, 10940.44, 11490.34, 14526.62, 10636.98, 9461.52, 8119.34, 5908.62, 5936.0, 9938.88, 6883.52, 6935.39, 6816.42, 8892.46, 10707.07, 10107.52, 13665.77, 13814.74, 13105.68, 13114.4, 5680.93, 11211.72, 14030.32, 13639.09, 10004.38, 8616.24, 12403.61, 11727.59, 10597.42, 7093.03, 10607.9, 13230.42, 13925.22, 12746.02, 0.0], "impr": [82520, 203149, 258849, 268433, 357710, 285111, 284592, 207935, 131534, 105387, 190431, 149844, 142599, 133532, 134278, 118635, 127765, 207235, 185261, 159233, 163569, 97628, 132694, 159488, 164864, 117811, 97554, 131875, 119202, 96042, 70356, 83671, 114384, 143751, 142964, 0], "clicks": [22731, 61454, 58769, 62432, 89491, 101340, 77930, 57682, 18648, 14549, 18089, 13358, 11317, 16393, 16273, 12794, 11805, 16047, 16303, 14026, 11992, 5989, 18286, 13313, 12336, 11796, 8558, 12566, 12084, 9555, 6579, 13824, 15523, 13441, 15762, 0], "conv": [10057, 23906, 17752, 7347, 29223, 35998, 25830, 19447, 5435, 4631, 5498, 3714, 2544, 5294, 5355, 4111, 3718, 4495, 4784, 3946, 3141, 1434, 6352, 3677, 3353, 3907, 2208, 3380, 3348, 2662, 1855, 4560, 4493, 3469, 4194, 0]}}, "states": {"all": {"Alabama": {"s": 9699.48, "c": 14576, "v": 4331, "i": 161479}, "Arizona": {"s": 12540.12, "c": 60781, "v": 17717, "i": 240562}, "Arkansas": {"s": 139.98, "c": 2177, "v": 1007, "i": 4134}, "California": {"s": 35066.52, "c": 81567, "v": 25623, "i": 355714}, "Colorado": {"s": 308.55, "c": 358, "v": 135, "i": 1453}, "Connecticut": {"s": 3204.96, "c": 13690, "v": 4369, "i": 41057}, "Delaware": {"s": 605.69, "c": 2634, "v": 1102, "i": 3783}, "District of Columbia": {"s": 15.6, "c": 425, "v": 212, "i": 577}, "Florida": {"s": 4139.61, "c": 41145, "v": 15419, "i": 75123}, "Georgia": {"s": 15911.62, "c": 72540, "v": 29257, "i": 206011}, "Illinois": {"s": 52221.49, "c": 103212, "v": 24079, "i": 1217568}, "Indiana": {"s": 18634.82, "c": 21014, "v": 5591, "i": 280743}, "Iowa": {"s": 2229.67, "c": 4438, "v": 1432, "i": 15396}, "Kansas": {"s": 4186.36, "c": 7533, "v": 2241, "i": 68201}, "Kentucky": {"s": 2639.7, "c": 5489, "v": 1786, "i": 38643}, "Maryland": {"s": 2650.2, "c": 8674, "v": 3471, "i": 23498}, "Massachusetts": {"s": 8630.52, "c": 20140, "v": 4121, "i": 157448}, "Michigan": {"s": 22678.71, "c": 35925, "v": 9510, "i": 407689}, "Minnesota": {"s": 6697.03, "c": 20056, "v": 4976, "i": 109282}, "Mississippi": {"s": 1788.2, "c": 6836, "v": 2519, "i": 30442}, "Missouri": {"s": 9842.0, "c": 16852, "v": 5357, "i": 95079}, "Nebraska": {"s": 3190.84, "c": 5624, "v": 1783, "i": 22140}, "Nevada": {"s": 818.14, "c": 8878, "v": 3910, "i": 13403}, "New Hampshire": {"s": 14153.17, "c": 17552, "v": 2420, "i": 333422}, "New Jersey": {"s": 2882.4, "c": 13544, "v": 4927, "i": 36255}, "New York": {"s": 17616.25, "c": 30270, "v": 7761, "i": 333505}, "North Carolina": {"s": 11226.98, "c": 42110, "v": 14942, "i": 122015}, "Ohio": {"s": 9833.44, "c": 17379, "v": 5386, "i": 86089}, "Oregon": {"s": 5083.99, "c": 9851, "v": 2449, "i": 85719}, "Pennsylvania": {"s": 21482.68, "c": 39418, "v": 9889, "i": 398472}, "Rhode Island": {"s": 23.74, "c": 1427, "v": 491, "i": 2132}, "South Carolina": {"s": 1203.31, "c": 11968, "v": 4786, "i": 17671}, "Tennessee": {"s": 24779.94, "c": 60352, "v": 18400, "i": 322565}, "Texas": {"s": 16317.71, "c": 57398, "v": 19786, "i": 156259}, "Virginia": {"s": 6023.61, "c": 21749, "v": 8445, "i": 52477}, "Washington": {"s": 830.69, "c": 3950, "v": 1321, "i": 8678}, "West Virginia": {"s": 400.91, "c": 852, "v": 314, "i": 3984}, "Wisconsin": {"s": 6110.29, "c": 9089, "v": 3457, "i": 33928}, "Remote": {"s": 163.09, "c": 1562, "v": 396, "i": 7274}, "Hawaii": {"s": 0.0, "c": 0, "v": 0, "i": 16}}}}, "zip": {"subtypes": {}, "series": {"all": {"spend": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 18.73, 3449.14, 1063.31, 989.12, 914.64, 1112.23, 4245.31, 964.68, 133.84, 4.32], "impr": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "clicks": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 38, 10048, 3665, 4712, 2762, 1626, 9327, 1806, 1705, 15], "conv": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 3529, 1447, 2018, 989, 560, 3830, 630, 638, 5]}}, "states": {"all": {"Alabama": {"s": 106.31, "c": 249, "v": 75, "i": 0}, "New York": {"s": 300.27, "c": 876, "v": 304, "i": 0}, "Arizona": {"s": 341.3, "c": 916, "v": 354, "i": 0}, "Arkansas": {"s": 54.93, "c": 174, "v": 74, "i": 0}, "California": {"s": 2386.92, "c": 5500, "v": 2216, "i": 0}, "Connecticut": {"s": 155.44, "c": 409, "v": 145, "i": 0}, "Delaware": {"s": 33.32, "c": 172, "v": 68, "i": 0}, "Florida": {"s": 653.39, "c": 2280, "v": 927, "i": 0}, "Georgia": {"s": 1632.91, "c": 4738, "v": 1993, "i": 0}, "Illinois": {"s": 421.65, "c": 1794, "v": 501, "i": 0}, "Indiana": {"s": 67.03, "c": 236, "v": 76, "i": 0}, "Kansas": {"s": 66.59, "c": 200, "v": 80, "i": 0}, "Maryland": {"s": 128.63, "c": 420, "v": 133, "i": 0}, "Massachusetts": {"s": 58.13, "c": 162, "v": 36, "i": 0}, "Michigan": {"s": 355.96, "c": 1003, "v": 333, "i": 0}, "Minnesota": {"s": 153.51, "c": 309, "v": 100, "i": 0}, "Missouri": {"s": 257.3, "c": 488, "v": 155, "i": 0}, "Nevada": {"s": 279.38, "c": 643, "v": 334, "i": 0}, "New Hampshire": {"s": 45.54, "c": 143, "v": 30, "i": 0}, "New Jersey": {"s": 327.37, "c": 1018, "v": 400, "i": 0}, "North Carolina": {"s": 610.09, "c": 1798, "v": 721, "i": 0}, "Ohio": {"s": 363.97, "c": 707, "v": 245, "i": 0}, "Oregon": {"s": 124.14, "c": 224, "v": 66, "i": 0}, "Pennsylvania": {"s": 369.17, "c": 891, "v": 231, "i": 0}, "South Carolina": {"s": 396.28, "c": 1287, "v": 563, "i": 0}, "Tennessee": {"s": 807.83, "c": 2399, "v": 1036, "i": 0}, "Texas": {"s": 1527.58, "c": 4105, "v": 1553, "i": 0}, "Washington": {"s": 163.18, "c": 390, "v": 119, "i": 0}, "West Virginia": {"s": 23.75, "c": 99, "v": 39, "i": 0}, "Wisconsin": {"s": 204.08, "c": 593, "v": 221, "i": 0}, "Iowa": {"s": 83.4, "c": 320, "v": 107, "i": 0}, "Mississippi": {"s": 27.69, "c": 151, "v": 50, "i": 0}, "Nebraska": {"s": 95.78, "c": 231, "v": 94, "i": 0}, "Virginia": {"s": 211.55, "c": 602, "v": 203, "i": 0}, "Kentucky": {"s": 42.62, "c": 103, "v": 33, "i": 0}, "Colorado": {"s": 18.33, "c": 76, "v": 35, "i": 0}}}}}};
+
+var WEEKS=INVEST.weeks;
+var CH=INVEST.channels;
+var CH_ORDER=['google','meta','indeed','zip'];
+var CH_NAME={google:'Google',meta:'Meta',indeed:'Indeed',zip:'ZipRecruiter'};
+var CH_BADGE={google:'bg',meta:'bm',indeed:'bi',zip:'bz'};
+var CH_COLOR={google:'#22c55e',meta:'#3b82f6',indeed:'#f59e0b',zip:'#a855f7'};
+var METRIC_LABEL={all:'All',spend:'Spend',impr:'Impr.',clicks:'Clicks',conversions:'Conversions',cpa:'CPA'};
+var CONV_TYPE_MAP={};
+CONV_TYPE_MAP['google']={};
+CONV_TYPE_MAP['google']['search']='applications';
+CONV_TYPE_MAP['google']['app']='installs';
+CONV_TYPE_MAP['meta']={};
+CONV_TYPE_MAP['meta']['app']='installs';
+CONV_TYPE_MAP['meta']['nonapp']='leads';
+CONV_TYPE_MAP['indeed']={'_all':'applications'};
+CONV_TYPE_MAP['zip']={'_all':'applications'};
+var stateNameMap={Alabama:'AL',Alaska:'AK',Arizona:'AZ',Arkansas:'AR',California:'CA',Colorado:'CO',Connecticut:'CT',Delaware:'DE','District of Columbia':'DC',Florida:'FL',Georgia:'GA',Hawaii:'HI',Idaho:'ID',Illinois:'IL',Indiana:'IN',Iowa:'IA',Kansas:'KS',Kentucky:'KY',Louisiana:'LA',Maine:'ME',Maryland:'MD',Massachusetts:'MA',Michigan:'MI',Minnesota:'MN',Mississippi:'MS',Missouri:'MO',Montana:'MT',Nebraska:'NE',Nevada:'NV','New Hampshire':'NH','New Jersey':'NJ','New Mexico':'NM','New York':'NY','North Carolina':'NC','North Dakota':'ND',Ohio:'OH',Oklahoma:'OK',Oregon:'OR',Pennsylvania:'PA','Rhode Island':'RI','South Carolina':'SC','South Dakota':'SD',Tennessee:'TN',Texas:'TX',Utah:'UT',Vermont:'VT',Virginia:'VA',Washington:'WA','West Virginia':'WV',Wisconsin:'WI',Wyoming:'WY'};
+var usTopology=null;
+
+function $(id){return document.getElementById(id)}
+function fmt(n){return n>=1e6?(n/1e6).toFixed(1)+'M':n>=1e3?(n/1e3).toFixed(1)+'K':Math.round(n).toLocaleString()}
+function fmtD(n){return '$'+n.toLocaleString(undefined,{maximumFractionDigits:0})}
+function fmtCPA(v){return v>0?'$'+v.toFixed(2):(v===0?'$0.00':'')}
+function sumArr(a){var s=0;for(var i=0;i<a.length;i++)s+=(a[i]||0);return s}
+function cv(v){return (v||0)}
+
+function sumSeries(list){
+  var out={spend:WEEKS.map(function(){return 0}),impr:WEEKS.map(function(){return 0}),clicks:WEEKS.map(function(){return 0}),conv:WEEKS.map(function(){return 0})};
+  list.forEach(function(sr){
+    for(var i=0;i<WEEKS.length;i++){
+      out.spend[i]+=cv(sr.spend[i]);out.impr[i]+=cv(sr.impr[i]);out.clicks[i]+=cv(sr.clicks[i]);out.conv[i]+=cv(sr.conv[i]);
+    }
+  });
+  return out;
+}
+function mergeStates(list){
+  var out={};
+  list.forEach(function(m){Object.keys(m||{}).forEach(function(k){
+    var a=out[k]||{s:0,c:0,v:0,i:0},b=m[k];
+    a.s+=b.s;a.c+=b.c;a.v+=b.v;a.i+=b.i;out[k]=a;
+  })});
+  return out;
+}
+function chSeries(chkey,st){
+  var ch=CH[chkey];
+  if(st&&st!=='all'&&ch.series[st])return ch.series[st];
+  return ch.series.all;
+}
+function chStates(chkey,st){
+  var ch=CH[chkey];
+  if(st&&st!=='all'&&ch.states[st])return ch.states[st];
+  return ch.states.all;
+}
+function allSeries(){
+  var list=CH_ORDER.map(function(k){return CH[k].series.all});
+  return sumSeries(list);
+}
+function allStates(){
+  var list=CH_ORDER.map(function(k){return CH[k].states.all});
+  return mergeStates(list);
+}
+function metricVal(ob,metric){
+  if(metric==='cpa')return ob.v>0?(ob.s/ob.v):0;
+  if(metric==='spend')return ob.s||0;
+  if(metric==='impr')return ob.i||0;
+  if(metric==='clicks')return ob.c||0;
+  if(metric==='conversions')return ob.v||0;
+  return ob.s||0;
+}
+function getConvType(chkey,st){
+  var m=CONV_TYPE_MAP[chkey];
+  if(!m)return null;
+  if(st&&st!=='all'&&m[st])return m[st];
+  if(m['_all'])return m['_all'];
+  var vals=[];Object.keys(m).forEach(function(k){if(k!=='_all')vals.push(m[k])});
+  var unique=[];vals.forEach(function(v){if(unique.indexOf(v)===-1)unique.push(v)});
+  return unique.length===1?unique[0]:null;
+}
+function getData(){
+  var ct=$('cType').value,convT=$('convType').value,st=$('subType').value,metric=$('mapMetric').value;
+  var inclChannels=CH_ORDER.slice();
+  if(convT!=='all'){
+    inclChannels=[];
+    CH_ORDER.forEach(function(ck){
+      var ch=CH[ck];var subtypes=ch.subtypes?Object.keys(ch.subtypes):[];
+      if(subtypes.length===0){
+        if(getConvType(ck,'_all')===convT)inclChannels.push(ck);
+      }else{
+        var any=subtypes.some(function(s){return getConvType(ck,s)===convT});
+        if(any)inclChannels.push(ck);
+      }
+    });
+  }
+  var serList=[];
+  inclChannels.forEach(function(ck){
+    if(ct==='all'||ct===ck){
+      if(st&&st!=='all')serList.push(chSeries(ck,st));
+      else serList.push(CH[ck].series.all);
+    }
+  });
+  var ser=sumSeries(serList);
+  var stateLists=[];
+  inclChannels.forEach(function(ck){
+    if(ct==='all'||ct===ck){
+      if(st&&st!=='all')stateLists.push(chStates(ck,st));
+      else stateLists.push(CH[ck].states.all);
+    }
+  });
+  var states=mergeStates(stateLists);
+  var nm;
+  if(ct==='all'&&convT==='all')nm='All Channels';
+  else if(ct!=='all')nm=CH_NAME[ct]+(st&&st!=='all'?' '+CH[ct].subtypes[st].label:'');
+  else nm=convT.charAt(0).toUpperCase()+convT.slice(1);
+  $('mapBadge').textContent=nm;
+  $('mapBadge').className='badge '+(ct!=='all'?CH_BADGE[ct]:'ba');
+  var d={states:states,series:ser,name:nm,metric:metric};
+  d.periodSpend=sumArr(ser.spend);d.periodClicks=sumArr(ser.clicks);d.periodConversions=sumArr(ser.conv);d.periodImpr=sumArr(ser.impr);
+  d.periodCPA=d.periodConversions>0?d.periodSpend/d.periodConversions:0;
+  var heat=metric==='all'?'spend':metric;
+  d.stateValues={};d.maxVal=0;
+  Object.keys(states).forEach(function(s){
+    var v=metricVal(states[s],heat);d.stateValues[s]=v;if(v>d.maxVal)d.maxVal=v;
+  });
+  d.metricLabel=METRIC_LABEL[metric]||metric;
+  return d;
+}
+function getPalette(ct){
+  if(ct==='meta')return{low:'#dbeafe',mid:'#60a5fa',high:'#1e3a5f'};
+  if(ct==='indeed')return{low:'#fef3c7',mid:'#f59e0b',high:'#92400e'};
+  if(ct==='zip')return{low:'#f3e8ff',mid:'#a855f7',high:'#4c1d95'};
+  return{low:'#dcfce7',mid:'#22c55e',high:'#14532d'};
+}
+function updateLegend(ct){
+  var c=getPalette(ct);$('legL').style.background=c.low;$('legML').style.background=c.mid;$('legMH').style.background=c.mid;$('legH').style.background=c.high;
+}
+function hexToRgb(hex){var r=/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);return r?{r:parseInt(r[1],16),g:parseInt(r[2],16),b:parseInt(r[3],16)}:{r:0,g:0,b:0};}
+function interpColor(palette,ratio){
+  if(ratio<0.5){var t=ratio*2;var c1=hexToRgb(palette.low),c2=hexToRgb(palette.mid);return 'rgb('+Math.round(c1.r+(c2.r-c1.r)*t)+','+Math.round(c1.g+(c2.g-c1.g)*t)+','+Math.round(c1.b+(c2.b-c1.b)*t)+')';}
+  else{var t=(ratio-0.5)*2;var c1=hexToRgb(palette.mid),c2=hexToRgb(palette.high);return 'rgb('+Math.round(c1.r+(c2.r-c1.r)*t)+','+Math.round(c1.g+(c2.g-c1.g)*t)+','+Math.round(c1.b+(c2.b-c1.b)*t)+')';}
+}
+function renderMap(d){
+  var ct=$('cType').value;
+  $('metricBadge').textContent=d.metricLabel;updateLegend(ct);
+  if(!usTopology){$('topStates').innerHTML='<div class="no-data">Loading map data...</div>';return;}
+  var svg=d3.select('#usMap');svg.selectAll('*').remove();
+  var states=topojson.feature(usTopology,usTopology.objects.states);
+  var projection=d3.geoAlbersUsa().fitSize([960,600],states);
+  var path=d3.geoPath().projection(projection);
+  var maxV=d.maxVal||1;
+  var palette=getPalette(ct);
+  svg.append('g').selectAll('path').data(states.features).enter().append('path')
+    .attr('d',path)
+    .attr('fill',function(f){
+      var nm=f.properties.name;
+      var ob=d.states[nm];
+      if(!ob||ob.s===0)return '#e2e8f0';
+      var vv=d.stateValues[nm]||0;
+      return interpColor(palette,vv/maxV);
+    })
+    .attr('stroke','#fff').attr('stroke-width',0.5).style('cursor','pointer')
+    .on('mouseenter',function(e,f){
+      var nm=f.properties.name;var abbr=stateNameMap[nm]||'?';
+      var ob=d.states[nm]||{s:0,c:0,v:0,i:0};var metric=d.metric;
+      function line(m){
+        if(metric!=='all'&&metric!==m)return'';
+        if(m==='spend')return'Spend: '+fmtD(Math.round(ob.s||0));
+        if(m==='impr')return'Impr.: '+fmt(ob.i||0);
+        if(m==='clicks')return'Clicks: '+fmt(ob.c||0);
+        if(m==='conversions')return'Conv.: '+fmt(ob.v||0);
+        if(m==='cpa')return'CPA: '+fmtCPA(ob.v>0?ob.s/ob.v:0);
+        return'';
+      }
+      var lines=[line('spend'),line('impr'),line('clicks'),line('conversions'),line('cpa')].filter(function(x){return x});
+      var tt=$('mapTooltip');
+      tt.innerHTML='<strong>'+nm+' ('+abbr+')</strong><br>'+lines.join('<br>');
+      tt.style.display='block';
+      d3.select(this).attr('stroke','#1e293b').attr('stroke-width',2);
+    })
+    .on('mousemove',function(e){var tt=$('mapTooltip');var rect=$('mapContainer').getBoundingClientRect();tt.style.left=(e.clientX-rect.left+10)+'px';tt.style.top=(e.clientY-rect.top-10)+'px';})
+    .on('mouseleave',function(){$('mapTooltip').style.display='none';d3.select(this).attr('stroke','#fff').attr('stroke-width',0.5)});
+  renderTable(d);
+}
+function renderTable(d){
+  var metric=d.metric;var isAll=(metric==='all');
+  var sorted=Object.keys(d.states).filter(function(s){return d.states[s].s>0}).sort(function(a,b){return (d.stateValues[b]||0)-(d.stateValues[a]||0)});
+  var barMax=d.maxVal||1;
+  function val(s,m){
+    var ob=d.states[s];
+    if(m==='cpa')return ob.v>0?ob.s/ob.v:0;
+    if(m==='spend')return ob.s||0;
+    if(m==='impr')return ob.i||0;
+    if(m==='clicks')return ob.c||0;
+    if(m==='conversions')return ob.v||0;
+    return 0;
+  }
+  function cell(v,m){return m==='spend'?fmtD(Math.round(v)):(m==='cpa'?fmtCPA(v):fmt(v))}
+  var cols=isAll?['spend','impr','clicks','conversions','cpa']:[metric];
+  var colLabels={spend:'Spend',impr:'Impr.',clicks:'Clicks',conversions:'Conv.',cpa:'CPA'};
+  var h='<table class="dt"><thead><tr><th>#</th><th>State</th>';
+  cols.forEach(function(c){h+='<th>'+colLabels[c]+'</th>'});
+  h+='<th></th></tr></thead><tbody>';
+  sorted.slice(0,25).forEach(function(s,i){
+    var pct=((d.stateValues[s]||0)/barMax*100).toFixed(0);
+    h+='<tr><td style="color:#64748b">'+(i+1)+'</td><td style="font-weight:600">'+s+'</td>';
+    cols.forEach(function(c){h+='<td>'+cell(val(s,c),c)+'</td>'});
+    h+='<td><div class="bar-cell" style="width:'+pct+'%;background:linear-gradient(90deg,#22c55e,#14532d);max-width:200px"></div></td></tr>';
+  });
+  h+='</tbody></table>';
+  $('topStates').innerHTML=sorted.length?h:'<div class="no-data">No data</div>';
+}
+function renderBottomTables(){
+  var selState=$('stateSel')?$('stateSel').value:'all';
+  var selCity=$('citySel')?$('citySel').value:'all';
+  var data=getScopeData(selState,selCity);
+  var weekSel=$('weekRange');var wIdx=weekSel?parseInt(weekSel.value):-1;
+  var startIdx=0;var endIdx=WEEKS.length-1;
+  if(wIdx>=0){startIdx=wIdx;endIdx=wIdx;}
+  var h='';
+  CHANNEL_CARDS.forEach(function(c){
+    var s=data[c.k];
+    var nm=c.label;var col=c.color;
+    var tot=s.tot||[0,0,0,0];
+    var tSpend=tot[0],tImpr=tot[1],tClk=tot[2],tConv=tot[3];
+    var hasWeeks=false;
+    for(var i=startIdx;i<=endIdx;i++){if((s.spend[i]||0)!=0){hasWeeks=true;break;}}
+    var tCPA=tConv>0?tSpend/tConv:0;
+    h+='<div class="card"><h2 style="display:flex;align-items:center;gap:6px"><span class="dot" style="width:9px;height:9px;border-radius:2px;background:'+col+'"></span>'+nm+'</h2>';
+    h+='<div class="tblWrap"><table class="dt"><thead><tr><th>Week</th><th>Cost</th><th>Impr.</th><th>Clicks</th><th>Conv.</th><th>CPA</th></tr></thead><tbody>';
+    if(hasWeeks){
+      for(var i=startIdx;i<=endIdx;i++){
+        var c=cv(s.spend[i]);if(c===0)continue;
+        var conv=cv(s.conv[i]);
+        h+='<tr><td>'+WEEKS[i]+'</td><td>'+fmtD(Math.round(c))+'</td><td>'+fmt(s.impr[i])+'</td><td>'+fmt(s.clicks[i])+'</td><td>'+fmt(conv)+'</td><td>'+fmtCPA(conv>0?c/conv:0)+'</td></tr>';
+      }
+    }else{
+      h+='<tr><td colspan="6" class="no-data" style="border:none">No weekly data</td></tr>';
+    }
+    h+='<tr class="tot"><td>TOTAL</td><td>'+fmtD(Math.round(tSpend))+'</td><td>'+fmt(tImpr)+'</td><td>'+fmt(tClk)+'</td><td>'+fmt(tConv)+'</td><td>'+fmtCPA(tCPA)+'</td></tr>';
+    h+='</tbody></table></div></div>';
+  });
+  $('tblRow').innerHTML=h;
+}
+function renderAll(){
+  renderBottomTables();
+}
+function onCampaignChange(){
+  var ct=$('cType').value;
+  var sel=$('subType');
+  if(ct==='all'){sel.innerHTML='<option value="all">All</option>';}
+  else{
+    sel.innerHTML='';
+    var subs=CH[ct]&&CH[ct].subtypes?Object.keys(CH[ct].subtypes):[];
+    sel.appendChild(new Option('All '+CH_NAME[ct],'all'));
+    subs.forEach(function(sv){
+      sel.appendChild(new Option(CH[ct].subtypes[sv].label,sv));
+    });
+  }
+  render();
+}
+function render(){
+  setTimeout(function(){
+    renderAll();
+    var d=getData();
+    renderMap(d);
+  },0);
+}
+function resetF(){
+  $('cType').value='all';
+  $('subType').innerHTML='<option value="all">All</option>';
+  $('convType').value='all';
+  $('mapMetric').value='spend';
+  $('weekRange').value='-1';
+  render();
+}
+function populateWeekRange(){
+  var sel=$('weekRange');
+  sel.appendChild(new Option('All Weeks','-1'));
+  WEEKS.forEach(function(w,i){
+    sel.appendChild(new Option(w,String(i)));
+  });
+}
+
+/* ---------------- STATE / CITY dynamic filters (real per-city data, Meta excluded) ---------------- */
+var CITY_DATA=window.CITY_DATA||{};
+var CITY_PLATFORMS=[
+  {k:'ga',label:'Google App',color:'#22c55e'},
+  {k:'gs',label:'Google Search',color:'#16a34a'},
+  {k:'in',label:'Indeed',color:'#f59e0b'},
+  {k:'zp',label:'ZipRecruiter',color:'#a855f7'}
+];
+var CHANNEL_CARDS=[
+  {k:'ga',label:'Google App',color:'#22c55e'},
+  {k:'gs',label:'Google Search',color:'#16a34a'},
+  {k:'in',label:'Indeed',color:'#f59e0b'},
+  {k:'zp',label:'ZipRecruiter',color:'#a855f7'}
+];
+var CITY_METRICS=[
+  {k:'s',label:'Spend',fmt:function(v){return fmtD(Math.round(v))}},
+  {k:'i',label:'Impr.',fmt:fmt},
+  {k:'c',label:'Clicks',fmt:fmt},
+  {k:'v',label:'Conv.',fmt:fmt},
+  {k:'cpa',label:'CPA',fmt:fmtCPA}
+];
+var STATE_ABBR2={Alabama:'AL',Alaska:'AK',Arizona:'AZ',Arkansas:'AR',California:'CA',Colorado:'CO',Connecticut:'CT',Delaware:'DE','District of Columbia':'DC',Florida:'FL',Georgia:'GA',Hawaii:'HI',Idaho:'ID',Illinois:'IL',Indiana:'IN',Iowa:'IA',Kansas:'KS',Kentucky:'KY',Louisiana:'LA',Maine:'ME',Maryland:'MD',Massachusetts:'MA',Michigan:'MI',Minnesota:'MN',Mississippi:'MS',Missouri:'MO',Montana:'MT',Nebraska:'NE',Nevada:'NV','New Hampshire':'NH','New Jersey':'NJ','New Mexico':'NM','New York':'NY','North Carolina':'NC','North Dakota':'ND',Ohio:'OH',Oklahoma:'OK',Oregon:'OR',Pennsylvania:'PA','Rhode Island':'RI','South Carolina':'SC','South Dakota':'SD',Tennessee:'TN',Texas:'TX',Utah:'UT',Vermont:'VT',Virginia:'VA',Washington:'WA','West Virginia':'WV',Wisconsin:'WI',Wyoming:'WY'};
+function cityKeyLabel(key){
+  var p=key.split('|');
+  return p[1]+', '+p[0];
+}
+function emptySeries(){
+  return {spend:WEEKS.map(function(){return 0}),impr:WEEKS.map(function(){return 0}),clicks:WEEKS.map(function(){return 0}),conv:WEEKS.map(function(){return 0})};
+}
+function addWeekly(base,rec){
+  var w=rec.w;
+  if(!w)return;
+  for(var i=0;i<w.length;i++){
+    var widx=w[i][0];if(widx<0||widx>=WEEKS.length)continue;
+    base.spend[widx]+=w[i][1];base.impr[widx]+=w[i][2];base.clicks[widx]+=w[i][3];base.conv[widx]+=w[i][4];
+  }
+}
+function getScopeData(state,city){
+  var out={ga:emptySeries(),gs:emptySeries(),in:emptySeries(),zp:emptySeries()};
+  var tot={ga:[0,0,0,0],gs:[0,0,0,0],in:[0,0,0,0],zp:[0,0,0,0]};
+  Object.keys(CITY_DATA).forEach(function(key){
+    var sp=key.split('|')[0];
+    if(state&&state!=='all'&&sp!==state)return;
+    if(city&&city!=='all'){
+      if(key!==city)return;
+    }
+    var rec=CITY_DATA[key];
+    if(!rec)return;
+    ['ga','gs','in','zp'].forEach(function(pk){
+      if(rec[pk]){
+        addWeekly(out[pk],rec[pk]);
+        var t=rec[pk].t;
+        if(t){tot[pk][0]+=t[0];tot[pk][1]+=t[1];tot[pk][2]+=t[2];tot[pk][3]+=t[3];}
+      }
+    });
+  });
+  Object.keys(out).forEach(function(pk){out[pk].tot=tot[pk]});
+  return out;
+}
+function populateStates(){
+  var sel=$('stateSel');
+  sel.appendChild(new Option('All States','all'));
+  Object.keys(STATE_ABBR2).sort().forEach(function(s){
+    sel.appendChild(new Option(s,s));
+  });
+}
+function populateCities(state){
+  var sel=$('citySel');
+  sel.innerHTML='';
+  sel.appendChild(new Option('All Cities','all'));
+  if(!state||state==='all'){
+    var hint=document.createElement('option');
+    hint.disabled=true;hint.value='';
+    hint.textContent='Select a state to list its cities';
+    sel.appendChild(hint);
+    return;
+  }
+  var list=Object.keys(CITY_DATA).filter(function(k){
+    return k.split('|')[0]===state;
+  }).sort(function(a,b){return cityKeyLabel(a).localeCompare(cityKeyLabel(b))});
+  list.forEach(function(k){sel.appendChild(new Option(cityKeyLabel(k),k))});
+}
+function onStateChange(){
+  var state=$('stateSel').value;
+  populateCities(state);
+  $('citySel').value='all';
+  renderAll();
+  renderCityDetailFromSel();
+}
+function onCityChange(){
+  renderAll();
+  renderCityDetailFromSel();
+}
+function resetGeo(){
+  $('stateSel').value='all';
+  populateCities('all');
+  $('citySel').value='all';
+  var bd=$('cityDetail');if(bd)bd.innerHTML='';
+  renderAll();
+}
+function renderCityDetailFromSel(){
+  var city=$('citySel')?$('citySel').value:'all';
+  var box=$('cityDetail');
+  if(!box)return;
+  if(!city||city==='all'){
+    var state=$('stateSel')?$('stateSel').value:'all';
+    if(state&&state!=='all'){
+      renderScopeSummary(state);
+    }else{
+      box.innerHTML='';
+    }
+    return;
+  }
+  renderCityDetail(city);
+}
+function renderScopeSummary(state){
+  var box=$('cityDetail');
+  var data=getScopeData(state,'all');
+  var h='<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><strong style="font-size:13px">'+state+'</strong><span class="badge ba">State totals (real, aggregated across its cities)</span></div>';
+  h+='<table class="dt" style="max-width:840px"><thead><tr><th>Platform</th>';
+  CITY_METRICS.forEach(function(m){h+='<th>'+m.label+'</th>'});
+  h+='</tr></thead><tbody>';
+  CITY_PLATFORMS.forEach(function(p){
+    var s=data[p.k];
+    var tSpend=sumArr(s.spend),tImpr=sumArr(s.impr),tClk=sumArr(s.clicks),tConv=sumArr(s.conv);
+    var cpa=tConv>0?tSpend/tConv:0;
+    var vals={s:tSpend,i:tImpr,c:tClk,v:tConv,cpa:cpa};
+    h+='<tr><td style="font-weight:600"><span class="dot" style="display:inline-block;width:8px;height:8px;border-radius:2px;background:'+p.color+';margin-right:4px"></span>'+p.label+'</td>';
+    CITY_METRICS.forEach(function(m){h+='<td>'+m.fmt(vals[m.k])+'</td>'});
+    h+='</tr>';
+  });
+  h+='</tbody></table>';
+  h+='<div style="color:#94a3b8;font-size:10px;margin-top:6px">Detailed weekly breakdown for this state shown in the 4 tables above.</div>';
+  box.innerHTML=h;
+}
+function renderCityDetail(key){
+  var box=$('cityDetail');
+  if(!box) return;
+  var rec=CITY_DATA[key]||{};
+  var h='';
+  h+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><strong style="font-size:13px">'+cityKeyLabel(key)+'</strong><span class="badge ba">Real values per platform (Meta excluded | no city-level data)</span></div>';
+  /* Per-platform totals table */
+  h+='<table class="dt" style="margin-bottom:16px;max-width:840px"><thead><tr><th>Platform</th>';
+  CITY_METRICS.forEach(function(m){h+='<th>'+m.label+'</th>'});
+  h+='</tr></thead><tbody>';
+  CITY_PLATFORMS.forEach(function(p){
+    var pr=rec[p.k];
+    h+='<tr><td style="font-weight:600"><span class="dot" style="display:inline-block;width:8px;height:8px;border-radius:2px;background:'+p.color+';margin-right:4px"></span>'+p.label+'</td>';
+    if(!pr){
+      h+='<td colspan="'+CITY_METRICS.length+'" style="color:#94a3b8;font-style:italic">No data</td>';
+    }else{
+      var t=pr.t; /* [spend,impr,clk,conv] */
+      var cpa=t[3]>0?t[0]/t[3]:0;
+      var vals={s:t[0],i:t[1],c:t[2],v:t[3],cpa:cpa};
+      CITY_METRICS.forEach(function(m){
+        h+='<td>'+m.fmt(vals[m.k])+'</td>';
+      });
+    }
+    h+='</tr>';
+  });
+  h+='</tbody></table>';
+  /* Weekly breakdown */
+  h+='<h2 style="margin-bottom:8px">Weekly Breakdown</h2>';
+  h+='<div style="display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(320px,1fr))">';
+  CITY_PLATFORMS.forEach(function(p){
+    var pr=rec[p.k];
+    h+='<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px">';
+    h+='<div style="font-weight:600;font-size:11px;margin-bottom:6px;color:#64748b;text-transform:uppercase"><span class="dot" style="display:inline-block;width:8px;height:8px;border-radius:2px;background:'+p.color+';margin-right:4px"></span>'+p.label+'</div>';
+    if(pr&&pr.w&&pr.w.length){
+      h+='<div class="tblWrap" style="max-height:260px"><table class="dt"><thead><tr><th>Week</th><th>Spend</th><th>Impr.</th><th>Clicks</th><th>Conv.</th><th>CPA</th></tr></thead><tbody>';
+      pr.w.forEach(function(w){
+        var wi=w[0],sp=w[1],im=w[2],cl=w[3],cv_=w[4],cpa=cv_>0?sp/cv_:0;
+        h+='<tr><td>'+WEEKS[wi]+'</td><td>'+fmtD(Math.round(sp))+'</td><td>'+fmt(im)+'</td><td>'+fmt(cl)+'</td><td>'+fmt(cv_)+'</td><td>'+fmtCPA(cpa)+'</td></tr>';
+      });
+      h+='</tbody></table></div>';
+    }else{
+      h+='<div class="no-data">No weekly data</div>';
+    }
+    h+='</div>';
+  });
+  h+='</div>';
+  box.innerHTML=h;
+}
+populateWeekRange();
+populateStates();
+populateCities('all');
+d3.json('https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json').then(function(topo){
+  usTopology=topo;render();
+}).catch(function(e){
+  console.error('Failed to load US topology',e);
+  $('mapContainer').innerHTML+='<p style="color:#ef4444;font-size:11px">Failed to load US map data</p>';
+  renderAll();renderMap(getData());
+});
+</script>
+</body>
+</html>
